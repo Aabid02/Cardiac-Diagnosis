@@ -1,0 +1,84 @@
+version: '3.8'
+services:
+  zookeeper:
+    image: 'bitnami/zookeeper:3.8'
+    environment:
+      - ALLOW_ANONYMOUS_LOGIN=yes
+
+  kafka:
+    image: 'bitnami/kafka:3'
+    environment:
+      - KAFKA_BROKER_ID=1
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
+      - ALLOW_PLAINTEXT_LISTENER=yes
+      - KAFKA_LISTENERS=PLAINTEXT://:9092
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+    depends_on:
+      - zookeeper
+
+  mongo:
+    image: mongo:6.0
+    volumes:
+      - mongo-data:/data/db
+
+  gateway:
+    build: ./gateway
+    ports:
+      - "4000:4000"
+    depends_on:
+      - auth
+      - userprofile
+      - diagnosis
+      - bookmark
+      - kafka
+      - mongo
+
+  auth:
+    build: ./services/auth-service
+    environment:
+      - MONGO_URL=mongodb://mongo:27017/cds_auth
+      - KAFKA_BROKER=kafka:9092
+    depends_on:
+      - mongo
+      - kafka
+
+  userprofile:
+    build: ./services/userprofile-service
+    environment:
+      - MONGO_URL=mongodb://mongo:27017/cds_user
+      - KAFKA_BROKER=kafka:9092
+    depends_on:
+      - mongo
+      - kafka
+
+  diagnosis:
+    build: ./services/diagnosis-service
+    ports:
+      - "5001:5001"
+    environment:
+      - EXTERNAL_DIAGNOSIS_URL=http://diagnosis-mock:7000/api/diagnoses
+    depends_on:
+      - mongo
+
+  bookmark:
+    build: ./services/bookmark-service
+    environment:
+      - MONGO_URL=mongodb://mongo:27017/cds_bookmark
+    depends_on:
+      - mongo
+
+  diagnosis-mock:
+    build: ./services/diagnosis-service/mock
+    container_name: diagnosis-mock
+    ports:
+      - "7000:7000"
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - gateway
+
+volumes:
+  mongo-data:
